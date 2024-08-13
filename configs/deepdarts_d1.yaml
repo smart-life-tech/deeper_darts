@@ -1,8 +1,8 @@
 #unchanged
 
 data:
-  path: 'dataset/'
-  labels_path: 'dataset/labels.pkl'
+  path: 'datasets/'
+  labels_path: 'datasets/labels.pkl'
   dataset: 'd1'  # either d1 or d2
 
 board:

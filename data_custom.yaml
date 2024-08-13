@@ -1,5 +1,5 @@
-train: /csse/users/hev23/Documents/Computer Vision/Project/deeper_darts/datasets/train
-val: /csse/users/hev23/Documents/Computer Vision/Project/deeper_darts/datasets/val
+train: C:/Users/USER/Documents/raspberrypi/dart/darts2/deeper_darts/datasets/800
+val: C:/Users/USER/Documents/raspberrypi/dart/darts2/deeper_darts/datasets/800
 
 nc: 5
 

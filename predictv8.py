@@ -7,54 +7,64 @@ import sys
 import logging
 import csv
 import time
-
+from PIL import Image
 est_cal_pts_cnt = 0
 
 def bboxes_to_xy(bboxes, max_darts=3):
     '''
-    Modified from DeepDarts.
-    Converts bounding box output from YOLOv8 of all classes to an xy centre point
+    Converts bounding box output from YOLOv8 of all classes to an xy centre point.
+    Handles darts and calibration points.
     '''
     xy = np.zeros((4 + max_darts, 3), dtype=np.float32)
     num_darts = 0
     max_darts_exceeded = False
+    
+    print(f"Shape of xy: {xy.shape}")
+    print(f"Value of boxes: {bboxes}")
 
     for bbox in bboxes: 
-        if int(bbox.cls) == 0 and not max_darts_exceeded: #bbox is around a dart, add dart centre to xy array
-            dart_xywhn = bbox.xywhn[0] #centre coordinates
-            # print(f"Dart found with xywhn: {dart_xywhn}")
+        if int(bbox.cls) == 0 and not max_darts_exceeded:  # bbox is around a dart, add dart center to xy array
+            dart_xywhn = bbox.xywhn[0]  # center coordinates
+            print(f"Dart found with xywhn: {dart_xywhn}")
+
             dart_x_centre = float(dart_xywhn[0])
             dart_y_centre = float(dart_xywhn[1])
-            dart_xy_centre = np.array([dart_x_centre,dart_y_centre])
-            # print(f"Dart centre xyn: {dart_xy_centre}")
-            # print(f"Num_darts: {num_darts}")
+            dart_xy_centre = np.array([dart_x_centre, dart_y_centre])
             
-            collumn = 4+num_darts
-            try:
-                xy[collumn,:2] = dart_xy_centre
-            except IndexError:
+            print(f"Dart centre xyn: {dart_xy_centre}")
+            print(f"Num_darts: {num_darts}")
+            
+            collumn = 4 + num_darts
+            
+            if collumn < xy.shape[0]:  # Ensure we're within bounds
+                xy[collumn, :2] = dart_xy_centre
+                num_darts += 1
+            else:
                 print(f"Couldn't add dart {num_darts+1}, index error")
-            num_darts += 1
-            if num_darts > max_darts:
-                print("Max number of darts exceeded, ignoring any other detected darts")
-                print("Need to add check for overlapping dart bounding boxes")
-                max_darts_exceeded = True
 
-        else:
-            cal_xywhn = bbox.xywhn[0] #centre coordinates
+            if num_darts >= max_darts:  # Stop if max darts is reached
+                print("Max number of darts exceeded, ignoring any other detected darts")
+                max_darts_exceeded = True
+        else:  # Handle calibration points
+            cal_xywhn = bbox.xywhn[0]  # center coordinates
             cal_x_centre = float(cal_xywhn[0])
             cal_y_centre = float(cal_xywhn[1])
-            cal_xy_centre = np.array([cal_x_centre,cal_y_centre])
+            cal_xy_centre = np.array([cal_x_centre, cal_y_centre])
 
-            collumn = int(bbox.cls)-1
-            xy[collumn, :2] = cal_xy_centre #put calibration point in correct place in array
+            collumn = int(bbox.cls) - 1
+            if collumn < xy.shape[0]:  # Ensure within bounds
+                xy[collumn, :2] = cal_xy_centre
 
-
+    # Mark valid points
     xy[(xy[:, 0] > 0) & (xy[:, 1] > 0), -1] = 1
+
+    # Check if all 4 calibration points are detected
     if np.sum(xy[:4, -1]) == 4:
         return xy
     else:
+        # Estimate missing calibration points
         xy = est_cal_pts(xy)
+    
     return xy
 
 
@@ -115,16 +125,18 @@ def get_label_xy(image_name, folder_path, max_darts=3):
     Gets the xy points from the label. Used for calculating 'actual' dart score.
     '''
     label_name = image_name.replace("JPG", "txt")
-    label_path = f"{folder_path}/{label_name}".replace("images", "labels")
-    # print(f"Label path: {label_path}")
+    print(f"Label name: {label_name}")
+    label_path = f"{folder_path}/{label_name}.txt".replace("images", "labels")
+    #label_path=folder_path
+    print(f"Label path: {label_path}")
     label_xy = np.zeros((4 + max_darts, 3), dtype=np.float32)
     num_darts = 0
     with open(label_path, 'r') as f:
         labels = f.readlines()
-        # print(f"Length of labels: {len(labels)}")
+        print(f"Length of labels: {len(labels)}")
         for label in labels:
             split_label = label.split(" ")
-            class_num = int(split_label[0])
+            class_num = int(float(split_label[0]))
             x_centre = float(split_label[1])
             y_centre = float(split_label[2])
             xy_centre = np.array([x_centre, y_centre])
@@ -132,11 +144,11 @@ def get_label_xy(image_name, folder_path, max_darts=3):
             if class_num == 0:
                 label_xy[4+num_darts, :2] = xy_centre
                 num_darts += 1
-                # print(f"Dart {num_darts}: {xy_centre}")
+                print(f"Dart {num_darts}: {xy_centre}")
             else:
                 label_xy[class_num - 1, :2] = xy_centre
 
-    # print(f"{num_darts} darts found in labels")
+    print(f"{num_darts} darts found in labels")
     label_xy[(label_xy[:, 0] > 0) & (label_xy[:, 1] > 0), -1] = 1
     return label_xy
 
@@ -146,7 +158,7 @@ def predict(model_directory):
     Used to predict dart location in 'image_folder_path' using the model in 'model_directory' 
     '''
     #path to test images
-    image_folder_path = 'datasets/test/images/d1_03_31_2020'
+    image_folder_path = 'C:\\Users\\USER\\Documents\\raspberrypi\\dart\\darts2\\deeper_darts\\datasets\\800\\d1_02_04_2020'
 
     #make a list of all image paths
     images = list_images_in_folder(image_folder_path)
@@ -155,7 +167,7 @@ def predict(model_directory):
     results_directory = 'DeeperDarts'
     
     best_weights_path = f'DeeperDarts/{model_directory}/weights/best.pt'
-
+    best_weights_path=f"C:\\Users\\USER\\Documents\\raspberrypi\\dart\\darts2\\deeper_darts\\models\\yolov8n.pt"
     print(f"Loading {best_weights_path}")
     #load model
     model = YOLO(best_weights_path)
@@ -188,38 +200,43 @@ def predict(model_directory):
     
     for i in range(len(images)):
         image = images[i]
-        image_name = images[i].split('/')[-1]
-        # print(f"Processing {i}th image: '{image_name}'")
+        image_name = os.path.basename(images[i])  # Extract just the filename
+        image_name = os.path.splitext(image_name)[0]
 
+        # Run model prediction
         results = model.predict(image)
         image_result = results[0]
-        image_result.save(f"{predicted_img_dir}/{image_name}.JPG")
+        
+        # Save the prediction image with annotations
+        annotated_image = image_result.plot()  # Gets the image with annotations as a NumPy array
+        annotated_image_pil = Image.fromarray(annotated_image)
+        annotated_image_pil.save(f"{predicted_img_dir}/{image_name}.JPG")
+        
+        # Extract bounding boxes
         boxes = image_result.boxes  
         speeds.append(image_result.speed['inference'])    
         xy = bboxes_to_xy(boxes) 
-        xy = xy[xy[:, -1] == 1] #remove any empty rows
-        predicted_score = get_dart_scores(xy,cfg, numeric=False)
+        xy = xy[xy[:, -1] == 1]  # Remove any empty rows
+        predicted_score = get_dart_scores(xy, cfg, numeric=False)
 
+        # Get the actual score from labels
         label_xy = get_label_xy(image_name, image_folder_path)
-        label_xy = label_xy[label_xy[:, -1] == 1] #remove any empty rows
+        label_xy = label_xy[label_xy[:, -1] == 1]  # Remove any empty rows
         actual_score = get_dart_scores(label_xy, cfg, numeric=False)
 
+        # Calculate the error
         error = sum(get_dart_scores(xy, cfg, numeric=True)) - sum(get_dart_scores(label_xy, cfg, numeric=True))
         errors.append(error)
         if error != 0:
-            # print(f"Scoring board from image {image_name}")
-            # print(f"Predicted Score: {predicted_score}")
-            # print(f"Actual Score: {actual_score}") 
-            # print(f"Error: {error}")
             logging.log(logging.WARN, f"Image {image_folder_path}/{image_name} had an error of {error}. Actual score: {actual_score}, Predicted score: {predicted_score}")
         else:
             no_error_total += 1
 
+        # Draw and save the image with detected points
         img = cv2.imread(image)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = draw(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), xy[:, :2], cfg, circles=False, score=True)
-        cv2.imwrite(osp.join(labeled_img_dir, image_name), img)
-
+        cv2.imwrite(osp.join(labeled_img_dir, image_name+'.jpg'), img)
 
     avg_inference_time_ms = round(sum(speeds)/len(speeds), 2)
 
@@ -232,7 +249,7 @@ def predict(model_directory):
     test_name = model_directory
 
     #read training results.csv
-    with open(f"{results_directory}/{model_directory}/results.csv") as f:
+    with open("C:\\Users\\USER\\Documents\\raspberrypi\\dart\\darts2\\deeper_darts\\DeeperDarts\\Shear_302\\results.csv") as f:
         epochs = 0
         reader = csv.reader(f)
         for row in reader:

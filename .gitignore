@@ -13,3 +13,6 @@ all_labels.tsv
 *dataset/*
 datasets/train/
 datasets/val/
+datasets/800
+datasets/test
+
