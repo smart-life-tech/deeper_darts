@@ -15,4 +15,5 @@ datasets/train/
 datasets/val/
 datasets/800
 datasets/test
+DeepDarts/droput_0.1/
 
